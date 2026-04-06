@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YHWH Calculator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+
+:root {
+  --cyan: #00ffe0;
+  --pink: #ff00aa;
+  --green: #00c853;
+  --red: #ff1744;
+  --bg: #060608;
+  --text: #e0e0e0;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background:var(--bg);
+  font-family:'Orbitron',sans-serif;
+  overflow:hidden;
+}
+
+/* Subtle grid overlay */
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:
+    linear-gradient(rgba(0,255,224,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,255,224,0.025) 1px,transparent 1px);
+  background-size:50px 50px;
+  z-index:1;pointer-events:none;
+}
+
+/* Vignette */
+body::after{
+  content:'';position:fixed;inset:0;
+  background:radial-gradient(ellipse at center,transparent 35%,rgba(0,0,0,0.65) 100%);
+  z-index:1;pointer-events:none;
+}
+
+canvas#bg{position:fixed;top:0;left:0;z-index:0}
+canvas#burst{position:fixed;top:0;left:0;z-index:5;pointer-events:none}
+
+/* ============ CALCULATOR ============ */
+.calculator{
+  position:relative;z-index:10;
+  width:380px;padding:28px;
+  border-radius:28px;
+  backdrop-filter:blur(30px);
+  background:linear-gradient(160deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015));
+  border:1px solid rgba(255,255,255,0.07);
+  box-shadow:0 0 40px rgba(0,255,224,0.12),0 0 80px rgba(255,0,170,0.08),0 24px 64px rgba(0,0,0,0.55);
+  opacity:0;visibility:hidden;
+}
+
+.calculator.float{
+  animation:floatIdle 6s ease-in-out infinite,pulseGlow 3s infinite alternate;
+}
+
+@keyframes floatIdle{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes pulseGlow{
+  0%{box-shadow:0 0 30px rgba(0,255,224,0.12),0 0 60px rgba(255,0,170,0.06),0 24px 64px rgba(0,0,0,0.55)}
+  50%{box-shadow:0 0 60px rgba(255,0,170,0.18),0 0 100px rgba(0,255,224,0.1),0 24px 64px rgba(0,0,0,0.55)}
+  100%{box-shadow:0 0 40px rgba(0,255,224,0.12),0 0 80px rgba(255,0,170,0.08),0 24px 64px rgba(0,0,0,0.55)}
+}
+
+/* ============ LOGO ============ */
+#calcLogo{
+  display:flex;justify-content:center;
+  margin-bottom:16px;
+  font-weight:900;font-size:26px;
+  letter-spacing:12px;
+  color:transparent;
+  background:linear-gradient(135deg,var(--cyan) 20%,var(--pink) 80%);
+  -webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(0 0 10px rgba(0,255,224,0.45)) drop-shadow(0 0 10px rgba(255,0,170,0.3));
+  opacity:0;transform:scale(0.4) translateY(10px);
+  user-select:none;
+}
+
+/* ============ DISPLAY ============ */
+.display{
+  position:relative;
+  background:rgba(0,0,0,0.75);
+  border:1px solid rgba(0,255,224,0.12);
+  border-radius:16px;
+  padding:14px 20px 16px;
+  margin-bottom:14px;
+  box-shadow:inset 0 0 24px rgba(0,255,224,0.06),inset 0 1px 0 rgba(255,255,255,0.04);
+  overflow:hidden;
+}
+
+/* Scanlines */
+.display::after{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.12) 2px,rgba(0,0,0,0.12) 4px);
+  pointer-events:none;border-radius:16px;
+}
+
+#exprLine{
+  font-family:'Share Tech Mono',monospace;
+  font-size:13px;color:rgba(255,0,170,0.55);
+  text-align:right;min-height:18px;
+  letter-spacing:1px;
+  overflow-x:auto;white-space:nowrap;
+  scrollbar-width:none;
+}
+#exprLine::-webkit-scrollbar{display:none}
+
+#resLine{
+  font-family:'Share Tech Mono',monospace;
+  font-size:36px;color:var(--cyan);
+  text-align:right;letter-spacing:2px;
+  overflow-x:auto;white-space:nowrap;
+  scrollbar-width:none;
+  transition:font-size .2s ease,color .3s,transform .2s;
+  min-height:44px;
+}
+#resLine::-webkit-scrollbar{display:none}
+
+#resLine.error{color:var(--red);animation:shake .4s ease}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-5px)}40%{transform:translateX(5px)}
+  60%{transform:translateX(-3px)}80%{transform:translateX(3px)}
+}
+
+#resLine.flash{animation:flashRes .3s ease}
+@keyframes flashRes{0%{transform:scale(1)}50%{transform:scale(1.04);color:#fff}100%{transform:scale(1)}}
+
+/* ============ EXTRA ROW ============ */
+.extra-row{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:10px;margin-bottom:12px;
+}
+.extra-row button{
+  height:38px;font-size:13px;font-weight:700;
+  border:1px solid rgba(255,0,170,0.25);
+  background:rgba(255,0,170,0.06);
+  color:var(--pink);border-radius:10px;
+  box-shadow:0 3px 0 rgba(255,0,170,0.2),0 4px 8px rgba(0,0,0,0.3);
+  transition:transform .12s cubic-bezier(.34,1.56,.64,1),box-shadow .12s,background .15s;
+}
+.extra-row button:hover{transform:translateY(-2px);background:rgba(255,0,170,0.12)}
+.extra-row button:active{transform:translateY(3px);box-shadow:0 0 0 rgba(255,0,170,0.2),0 1px 2px rgba(0,0,0,0.3)}
+
+/* ============ BUTTONS ============ */
+.buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
+
+button{
+  height:62px;border:none;border-radius:14px;
+  font-size:20px;font-family:'Orbitron',sans-serif;font-weight:700;
+  background:rgba(255,255,255,0.055);color:var(--text);
+  cursor:pointer;position:relative;overflow:hidden;
+  -webkit-tap-highlight-color:transparent;outline:none;
+  transition:transform .12s cubic-bezier(.34,1.56,.64,1),box-shadow .12s,background .15s;
+  box-shadow:0 5px 0 rgba(0,255,224,0.2),0 8px 18px rgba(0,0,0,0.4);
+}
+button:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
+button:hover{transform:translateY(-3px) scale(1.02);background:rgba(255,255,255,0.09)}
+button:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,255,224,0.2),0 2px 4px rgba(0,0,0,0.4)}
+
+button.bounce{animation:bnc .25s ease}
+@keyframes bnc{0%{transform:translateY(0) scale(1)}40%{transform:translateY(5px) scale(.95)}70%{transform:translateY(-2px) scale(1.02)}100%{transform:translateY(0) scale(1)}}
+
+button.glow{animation:glw .3s ease}
+@keyframes glw{
+  0%{box-shadow:0 5px 0 rgba(0,255,224,0.2),0 8px 18px rgba(0,0,0,0.4),0 0 0 rgba(0,255,224,0)}
+  40%{box-shadow:0 3px 0 rgba(0,255,224,0.2),0 4px 8px rgba(0,0,0,0.3),0 0 18px rgba(0,255,224,0.5),0 0 36px rgba(255,0,170,0.25)}
+  100%{box-shadow:0 5px 0 rgba(0,255,224,0.2),0 8px 18px rgba(0,0,0,0.4),0 0 0 rgba(0,255,224,0)}
+}
+
+.operator{
+  background:linear-gradient(145deg,#ff00aa,#cc0088);color:#fff;
+  box-shadow:0 5px 0 #990066,0 8px 18px rgba(0,0,0,0.4);
+}
+.operator:hover{background:linear-gradient(145deg,#ff33bb,#dd0099)}
+.operator:active{box-shadow:0 1px 0 #990066,0 2px 4px rgba(0,0,0,0.4)}
+
+.equal{
+  background:linear-gradient(145deg,var(--green),#00a844);color:#fff;
+  grid-column:span 2;
+  box-shadow:0 5px 0 #007733,0 8px 18px rgba(0,0,0,0.4);
+}
+.equal:hover{background:linear-gradient(145deg,#00dd5c,#00bb4d)}
+.equal:active{box-shadow:0 1px 0 #007733,0 2px 4px rgba(0,0,0,0.4)}
+
+.clear{
+  background:linear-gradient(145deg,var(--red),#cc1133);color:#fff;
+  box-shadow:0 5px 0 #990022,0 8px 18px rgba(0,0,0,0.4);
+}
+.clear:hover{background:linear-gradient(145deg,#ff4466,#dd2244)}
+.clear:active{box-shadow:0 1px 0 #990022,0 2px 4px rgba(0,0,0,0.4)}
+
+/* Ripple */
+.ripple{
+  position:absolute;border-radius:50%;transform:scale(0);
+  animation:rip .5s linear;pointer-events:none;
+  background:rgba(255,255,255,0.25);
+}
+@keyframes rip{to{transform:scale(4);opacity:0}}
+
+/* ============ CORNER BUTTONS ============ */
+.corner-btn{
+  position:absolute;top:14px;
+  width:30px;height:30px;border-radius:50%;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.08);
+  color:rgba(255,255,255,0.35);font-size:13px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  z-index:20;box-shadow:none;
+  transition:all .2s;font-family:'Share Tech Mono',monospace;
+}
+.corner-btn:hover{transform:none}
+#soundBtn{right:14px}
+#soundBtn:hover{color:var(--cyan);border-color:rgba(0,255,224,0.3)}
+#soundBtn.muted{color:rgba(255,255,255,0.12)}
+#histBtn{left:14px}
+#histBtn:hover{color:var(--pink);border-color:rgba(255,0,170,0.3)}
+
+/* ============ HISTORY PANEL ============ */
+#overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.5);
+  z-index:99;opacity:0;pointer-events:none;transition:opacity .3s;
+}
+#overlay.open{opacity:1;pointer-events:auto}
+
+#histPanel{
+  position:fixed;top:0;right:-320px;
+  width:300px;height:100vh;
+  background:rgba(8,8,12,0.96);
+  backdrop-filter:blur(20px);
+  border-left:1px solid rgba(255,255,255,0.06);
+  z-index:100;padding:24px 20px;
+  overflow-y:auto;
+  transition:right .4s cubic-bezier(.4,0,.2,1);
+  scrollbar-width:thin;scrollbar-color:rgba(0,255,224,0.15) transparent;
+}
+#histPanel.open{right:0}
+
+#histPanel h3{
+  font-size:12px;color:var(--pink);letter-spacing:4px;
+  margin-bottom:16px;padding-bottom:12px;
+  border-bottom:1px solid rgba(255,0,170,0.15);
+}
+
+.h-item{
+  padding:10px 12px;margin-bottom:6px;
+  border-radius:10px;background:rgba(255,255,255,0.025);
+  border:1px solid rgba(255,255,255,0.04);
+  cursor:pointer;transition:all .2s;
+}
+.h-item:hover{background:rgba(0,255,224,0.04);border-color:rgba(0,255,224,0.12)}
+.h-expr{font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(255,0,170,0.45);margin-bottom:3px}
+.h-res{font-family:'Share Tech Mono',monospace;font-size:18px;color:var(--cyan)}
+
+#clearHist{
+  width:100%;margin-top:14px;height:34px;
+  font-size:10px;letter-spacing:2px;border-radius:8px;
+  background:rgba(255,23,68,0.08);border:1px solid rgba(255,23,68,0.15);
+  color:var(--red);box-shadow:none;font-family:'Orbitron',sans-serif;
+}
+#clearHist:hover{background:rgba(255,23,68,0.18);transform:none}
+
+#histEmpty{
+  color:rgba(255,255,255,0.15);font-size:11px;
+  text-align:center;margin-top:40px;letter-spacing:1px;
+}
+
+/* ============ RESPONSIVE ============ */
+@media(max-width:420px){
+  .calculator{width:94vw;padding:20px;border-radius:22px}
+  button{height:54px;font-size:17px;border-radius:12px}
+  .extra-row button{height:34px;font-size:12px}
+  #resLine{font-size:28px}
+  #calcLogo{font-size:22px;letter-spacing:8px}
+  .buttons{gap:8px}
+  .extra-row{gap:8px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<canvas id="burst"></canvas>
+<div id="overlay" onclick="toggleHist()"></div>
+
+<aside id="histPanel" role="complementary" aria-label="Calculation History">
+  <h3>HISTORY</h3>
+  <div id="histList"></div>
+  <p id="histEmpty">No calculations yet</p>
+  <button id="clearHist" onclick="clearHist()">CLEAR ALL</button>
+</aside>
+
+<main class="calculator" id="calc" role="application" aria-label="YHWH Calculator">
+  <button class="corner-btn" id="soundBtn" onclick="toggleSound()" aria-label="Toggle sound" title="Sound">&#9835;</button>
+  <button class="corner-btn" id="histBtn" onclick="toggleHist()" aria-label="History" title="History">&#9776;</button>
+
+  <div id="calcLogo">YHWH</div>
+
+  <div class="display" role="status" aria-live="polite">
+    <div id="exprLine"></div>
+    <div id="resLine">0</div>
+  </div>
+
+  <div class="extra-row">
+    <button onclick="apnd('(')" aria-label="Open parenthesis">(</button>
+    <button onclick="apnd(')')" aria-label="Close parenthesis">)</button>
+    <button onclick="apndFunc('sqrt')" aria-label="Square root">&#8730;</button>
+    <button onclick="apndFunc('sq')" aria-label="Square">x&#178;</button>
+  </div>
+
+  <div class="buttons">
+    <button class="clear" onclick="clr()">C</button>
+    <button onclick="del()" aria-label="Delete">&#9003;</button>
+    <button onclick="apnd('%')">%</button>
+    <button class="operator" onclick="apnd('/')">&#247;</button>
+
+    <button onclick="apnd('7')">7</button>
+    <button onclick="apnd('8')">8</button>
+    <button onclick="apnd('9')">9</button>
+    <button class="operator" onclick="apnd('*')">&#215;</button>
+
+    <button onclick="apnd('4')">4</button>
+    <button onclick="apnd('5')">5</button>
+    <button onclick="apnd('6')">6</button>
+    <button class="operator" onclick="apnd('-')">&#8722;</button>
+
+    <button onclick="apnd('1')">1</button>
+    <button onclick="apnd('2')">2</button>
+    <button onclick="apnd('3')">3</button>
+    <button class="operator" onclick="apnd('+')">+</button>
+
+    <button onclick="apnd('0')">0</button>
+    <button onclick="apnd('.')">.</button>
+    <button class="equal" onclick="calc()">=</button>
+  </div>
+</main>
+
+<script>
+/* =============================================
+   AUDIO
+============================================= */
+let actx=null, sndOn=true;
+
+function initAudio(){
+  if(!actx) actx=new(window.AudioContext||window.webkitAudioContext)();
+  if(actx.state==='suspended') actx.resume();
+}
+
+function snd(type){
+  if(!sndOn||!actx)return;
+  try{
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.connect(g);g.connect(actx.destination);
+    const t=actx.currentTime;
+    switch(type){
+      case'num':o.type='sine';o.frequency.setValueAtTime(1100,t);g.gain.setValueAtTime(.03,t);g.gain.exponentialRampToValueAtTime(.001,t+.04);o.start(t);o.stop(t+.04);break;
+      case'op':o.type='triangle';o.frequency.setValueAtTime(750,t);o.frequency.exponentialRampToValueAtTime(350,t+.07);g.gain.setValueAtTime(.04,t);g.gain.exponentialRampToValueAtTime(.001,t+.07);o.start(t);o.stop(t+.07);break;
+      case'eq':
+        o.type='sine';o.frequency.setValueAtTime(880,t);o.frequency.setValueAtTime(1100,t+.05);o.frequency.setValueAtTime(1320,t+.1);
+        g.gain.setValueAtTime(.05,t);g.gain.exponentialRampToValueAtTime(.001,t+.18);o.start(t);o.stop(t+.18);break;
+      case'err':o.type='sawtooth';o.frequency.setValueAtTime(140,t);g.gain.setValueAtTime(.025,t);g.gain.exponentialRampToValueAtTime(.001,t+.18);o.start(t);o.stop(t+.18);break;
+      case'clr':o.type='sine';o.frequency.setValueAtTime(550,t);o.frequency.exponentialRampToValueAtTime(180,t+.09);g.gain.setValueAtTime(.03,t);g.gain.exponentialRampToValueAtTime(.001,t+.09);o.start(t);o.stop(t+.09);break;
+    }
+  }catch(e){}
+}
+
+function toggleSound(){
+  sndOn=!sndOn;
+  const b=document.getElementById('soundBtn');
+  b.classList.toggle('muted',!sndOn);
+  b.innerHTML=sndOn?'&#9835;':'&#9834;';
+  if(sndOn){initAudio();snd('num')}
+}
+
+/* =============================================
+   PARTICLE BACKGROUND
+============================================= */
+const bgC=document.getElementById('bg'),bgX=bgC.getContext('2d');
+let pts=[],mx=-999,my=-999;
+
+function rsBg(){bgC.width=innerWidth;bgC.height=innerHeight}
+rsBg();addEventListener('resize',rsBg);
+document.addEventListener('mousemove',e=>{mx=e.clientX;my=e.clientY});
+document.addEventListener('mouseleave',()=>{mx=-999;my=-999});
+
+class Pt{
+  constructor(){this.rs()}
+  rs(){
+    this.x=Math.random()*bgC.width;this.y=Math.random()*bgC.height;
+    this.vx=(Math.random()-.5)*.4;this.vy=(Math.random()-.5)*.4;
+    this.r=Math.random()*1.8+.4;
+    this.pk=Math.random()>.6;this.a=Math.random()*.45+.15;
+  }
+  up(){
+    const dx=mx-this.x,dy=my-this.y,d=Math.sqrt(dx*dx+dy*dy);
+    if(d<180&&d>1){this.vx+=dx/d*.015;this.vy+=dy/d*.015}
+    this.vx*=.992;this.vy*=.992;
+    this.x+=this.vx;this.y+=this.vy;
+    if(this.x<-20)this.x=bgC.width+20;if(this.x>bgC.width+20)this.x=-20;
+    if(this.y<-20)this.y=bgC.height+20;if(this.y>bgC.height+20)this.y=-20;
+  }
+  dr(){
+    bgX.beginPath();bgX.arc(this.x,this.y,Math.max(.1,this.r),0,Math.PI*2);
+    bgX.fillStyle=this.pk?`rgba(255,0,170,${this.a})`:`rgba(0,255,224,${this.a})`;
+    bgX.fill();
+  }
+}
+
+const pCnt=Math.min(90,Math.floor(innerWidth*innerHeight/14000));
+for(let i=0;i<pCnt;i++)pts.push(new Pt());
+
+function drawLines(){
+  for(let i=0;i<pts.length;i++){
+    for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<110){
+        bgX.beginPath();bgX.moveTo(pts[i].x,pts[i].y);bgX.lineTo(pts[j].x,pts[j].y);
+        bgX.strokeStyle=`rgba(0,255,224,${(1-d/110)*.12})`;bgX.lineWidth=.5;bgX.stroke();
+      }
+    }
+  }
+}
+
+(function animBg(){
+  bgX.clearRect(0,0,bgC.width,bgC.height);
+  pts.forEach(p=>{p.up();p.dr()});drawLines();
+  requestAnimationFrame(animBg);
+})();
+
+/* =============================================
+   BURST EFFECT
+============================================= */
+const buC=document.getElementById('burst'),buX=buC.getContext('2d');
+let bps=[];
+
+function rsBu(){buC.width=innerWidth;buC.height=innerHeight}
+rsBu();addEventListener('resize',rsBu);
+
+class Bp{
+  constructor(x,y,c){
+    this.x=x;this.y=y;
+    const a=Math.random()*Math.PI*2,s=Math.random()*5+2;
+    this.vx=Math.cos(a)*s;this.vy=Math.sin(a)*s;
+    this.l=1;this.dc=Math.random()*.018+.012;
+    this.r=Math.random()*2.5+.8;this.c=c;
+  }
+  up(){this.x+=this.vx;this.y+=this.vy;this.vy+=.06;this.l-=this.dc}
+  dr(){
+    if(this.l<=0)return;
+    buX.beginPath();buX.arc(this.x,this.y,Math.max(.1,this.r*this.l),0,Math.PI*2);
+    buX.fillStyle=this.c.replace('1)',`${this.l})`);buX.fill();
+  }
+}
+
+function burst(err){
+  const r=document.getElementById('calc').getBoundingClientRect();
+  const cx=r.left+r.width/2,cy=r.top+r.height/2;
+  const cols=err?['rgba(255,23,68,1)']:['rgba(0,255,224,1)','rgba(255,0,170,1)','rgba(0,200,83,1)'];
+  for(let i=0;i<45;i++)bps.push(new Bp(cx,cy,cols[Math.floor(Math.random()*cols.length)]));
+}
+
+(function animBu(){
+  buX.clearRect(0,0,buC.width,buC.height);
+  bps=bps.filter(p=>p.l>0);bps.forEach(p=>{p.up();p.dr()});
+  requestAnimationFrame(animBu);
+})();
+
+/* =============================================
+   CALCULATOR STATE
+============================================= */
+const exprEl=document.getElementById('exprLine');
+const resEl=document.getElementById('resLine');
+let dExpr='0',cExpr='0',lastExpr='',didCalc=false,hist=[];
+
+/* Convert display string to compute string */
+function d2c(d){
+  return d.replace(/√\(/g,'Math.sqrt(').replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/²/g,'**2');
+}
+
+/* Get display char for a compute char */
+function dChar(v){return{'*':'×','/':'÷','-':'−'}[v]||v}
+
+function autoSz(){
+  const l=resEl.textContent.length;
+  resEl.style.fontSize=l<10?'36px':l<14?'30px':l<20?'24px':'18px';
+}
+
+function updDisp(){
+  exprEl.textContent=lastExpr;
+  exprEl.scrollLeft=exprEl.scrollWidth;
+  resEl.textContent=dExpr;
+  resEl.scrollLeft=resEl.scrollWidth;
+  autoSz();
+}
+
+/* =============================================
+   CORE LOGIC
+============================================= */
+function apnd(v){
+  initAudio();
+
+  if(didCalc){
+    if(!isNaN(v)||v==='.'){dExpr='0';cExpr='0';lastExpr=''}
+    didCalc=false;
+  }
+
+  const cl=cExpr.slice(-1);
+  const isOp='+-*/%'.includes(v);
+
+  /* Replace double operator */
+  if(isOp&&'+-*/%'.includes(cl)){
+    dExpr=dExpr.slice(0,-1)+dChar(v);
+    cExpr=cExpr.slice(0,-1)+v;
+    updDisp();snd('op');return;
+  }
+
+  /* No operator at start except minus */
+  if(isOp&&cExpr==='0'&&v!=='-')return;
+
+  /* No % after operator */
+  if(v==='%'&&'+-*/%'.includes(cl))return;
+
+  /* Dot rules */
+  if(v==='.'){
+    const segs=dExpr.split(/[+\-×÷%()√]/);
+    if(segs[segs.length-1].includes('.'))return;
+    if('+-×÷%('.includes(dExpr.slice(-1))){
+      dExpr+='0.';cExpr+='0.';updDisp();snd('num');return;
+    }
+    if(dExpr.slice(-1)==='%')return;
+  }
+
+  /* Parenthesis rules */
+  if(v===')'){
+    const op=(dExpr.match(/\(/g)||[]).length,cl2=(dExpr.match(/\)/g)||[]).length;
+    if(cl2>=op)return;
+    if('+-×÷%('.includes(dExpr.slice(-1)))return;
+  }
+
+  /* Build strings */
+  if(dExpr==='0'&&!isNaN(v)&&v!=='0'){dExpr=v;cExpr=v}
+  else if(dExpr==='0'&&v==='0'){return}
+  else if(dExpr==='0'&&v==='-'){dExpr='-';cExpr='-'}
+  else if(dExpr==='0'&&v==='('){dExpr='(';cExpr='('}
+  else{dExpr+=dChar(v);cExpr+=v}
+
+  updDisp();snd(isOp?'op':'num');
+}
+
+function apndFunc(type){
+  initAudio();
+  if(didCalc){
+    if(type==='sqrt'){dExpr='√('+dExpr+')';cExpr='Math.sqrt('+cExpr+')'}
+    else{dExpr='('+dExpr+')²';cExpr='('+cExpr+')**2'}
+    lastExpr='';didCalc=false;updDisp();snd('op');return;
+  }
+  const lc=dExpr.slice(-1);
+  if(isNaN(lc)&&lc!==')'&&lc!=='%'&&lc!=='²')return;
+  if(type==='sqrt'){dExpr='√('+dExpr+')';cExpr='Math.sqrt('+cExpr+')'}
+  else{dExpr='('+dExpr+')²';cExpr='('+cExpr+')**2'}
+  lastExpr='';updDisp();snd('op');
+}
+
+function clr(){
+  initAudio();dExpr='0';cExpr='0';lastExpr='';didCalc=false;
+  resEl.classList.remove('error');updDisp();snd('clr');
+}
+
+function del(){
+  initAudio();
+  if(didCalc){clr();return}
+  if(dExpr.length<=1||(dExpr.length<=2&&dExpr[0]==='-')){dExpr='0'}
+  else{dExpr=dExpr.slice(0,-1);if(dExpr.endsWith('√'))dExpr=dExpr.slice(0,-1)}
+  if(!dExpr||dExpr==='-')dExpr='0';
+  cExpr=d2c(dExpr);updDisp();snd('num');
+}
+
+function fmtRes(n){
+  if(!isFinite(n))return'Error';
+  if(Number.isInteger(n)&&Math.abs(n)<1e15)return n.toString();
+  const s=parseFloat(n.toPrecision(12)).toString();
+  return s;
+}
+
+function calc(){
+  initAudio();resEl.classList.remove('error','flash');
+  if(dExpr==='0'&&!didCalc)return;
+
+  let ce=cExpr,de=dExpr;
+
+  /* Auto-close parens */
+  const op=(de.match(/\(/g)||[]).length,cl=(de.match(/\)/g)||[]).length;
+  for(let i=0;i<op-cl;i++){ce+=')';de+=')'}
+
+  /* Strip trailing operator */
+  if('+-*/%'.includes(ce.slice(-1))){ce=ce.slice(0,-1);de=de.slice(0,-1)}
+
+  try{
+    const r=Function('"use strict";return('+ce+')')();
+    if(typeof r!=='number')throw 0;
+    lastExpr=de+' =';
+    const rs=fmtRes(r);dExpr=rs;cExpr=rs;didCalc=true;
+    updDisp();resEl.classList.add('flash');snd('eq');burst(false);
+    hist.unshift({e:de,r:rs});if(hist.length>50)hist.pop();renderHist();
+    setTimeout(()=>resEl.classList.remove('flash'),300);
+  }catch(e){
+    dExpr='Error';cExpr='0';didCalc=true;updDisp();
+    resEl.classList.add('error');snd('err');burst(true);
+    setTimeout(()=>resEl.classList.remove('error'),400);
+  }
+}
+
+/* =============================================
+   HISTORY
+============================================= */
+function renderHist(){
+  const l=document.getElementById('histList'),em=document.getElementById('histEmpty');
+  if(!hist.length){l.innerHTML='';em.style.display='block';return}
+  em.style.display='none';
+  l.innerHTML=hist.map((h,i)=>`<div class="h-item" onclick="recall(${i})" tabindex="0" role="button"><div class="h-expr">${h.e}</div><div class="h-res">= ${h.r}</div></div>`).join('');
+}
+
+function recall(i){
+  const h=hist[i];dExpr=h.r;cExpr=h.r;lastExpr=h.e+' =';didCalc=true;
+  updDisp();toggleHist();snd('num');
+}
+
+function clearHist(){hist=[];renderHist();snd('clr')}
+
+function toggleHist(){
+  document.getElementById('histPanel').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+}
+
+/* =============================================
+   BUTTON EFFECTS
+============================================= */
+function pressFx(val){
+  const m={'/':'÷','*':'×','-':'−'};
+  document.querySelectorAll('.buttons button,.extra-row button').forEach(b=>{
+    if(b.textContent.trim()===val||b.textContent.trim()===m[val]){
+      b.classList.remove('bounce','glow');void b.offsetWidth;
+      b.classList.add('bounce','glow');
+    }
+  });
+}
+
+document.querySelectorAll('.buttons button,.extra-row button').forEach(b=>{
+  b.addEventListener('click',e=>{
+    initAudio();
+    pressFx(b.textContent.trim());
+    const rip=document.createElement('span');rip.className='ripple';
+    const rc=b.getBoundingClientRect();
+    rip.style.left=(e.clientX-rc.left)+'px';rip.style.top=(e.clientY-rc.top)+'px';
+    b.appendChild(rip);setTimeout(()=>rip.remove(),500);
+  });
+});
+
+/* =============================================
+   KEYBOARD
+============================================= */
+document.addEventListener('keydown',e=>{
+  const hp=document.getElementById('histPanel').classList.contains('open');
+  if(hp&&e.key==='Escape'){toggleHist();return}
+  initAudio();
+
+  if(e.key==='Enter'){e.preventDefault();calc();pressFx('=')}
+  else if(e.key==='Backspace'){e.preventDefault();del();pressFx('\u23CE')}
+  else if(e.key==='Escape'){clr();pressFx('C')}
+  else if(e.key==='('){apnd('(');pressFx('(')}
+  else if(e.key===')'){apnd(')');pressFx(')')}
+  else if(!isNaN(e.key)){apnd(e.key);pressFx(e.key)}
+  else if('+-*/.%'.includes(e.key)){apnd(e.key);pressFx(e.key)}
+});
+
+/* =============================================
+   INTRO ANIMATION
+============================================= */
+const calcEl=document.getElementById('calc');
+const allBtns=document.querySelectorAll('.buttons button,.extra-row button');
+const dispBox=document.querySelector('.display');
+const logo=document.getElementById('calcLogo');
+const sBtn=document.getElementById('soundBtn');
+const hBtn=document.getElementById('histBtn');
+
+allBtns.forEach(b=>{
+  b.style.transform=`translate3d(${Math.random()*280-140}px,${Math.random()*180-90}px,0) scale(.3) rotate(${Math.random()*20-10}deg)`;
+  b.style.opacity='0';
+});
+dispBox.style.transform='translate3d(0,-120px,0) scale(.6)';
+dispBox.style.opacity='0';
+sBtn.style.opacity='0';hBtn.style.opacity='0';
+
+setTimeout(()=>{
+  calcEl.style.visibility='visible';calcEl.style.opacity='1';calcEl.classList.add('float');
+
+  setTimeout(()=>{
+    dispBox.style.transition='all .5s cubic-bezier(.34,1.56,.64,1)';
+    dispBox.style.transform='translate3d(0,0,0) scale(1)';dispBox.style.opacity='1';
+  },80);
+
+  const exBtns=document.querySelectorAll('.extra-row button');
+  exBtns.forEach((b,i)=>{
+    setTimeout(()=>{b.style.transition='all .35s cubic-bezier(.34,1.56,.64,1)';b.style.transform='translate3d(0,0,0) scale(1) rotate(0deg)';b.style.opacity='1'},200+i*45);
+  });
+
+  const mnBtns=document.querySelectorAll('.buttons button');
+  mnBtns.forEach((b,i)=>{
+    setTimeout(()=>{b.style.transition='all .4s cubic-bezier(.34,1.56,.64,1)';b.style.transform='translate3d(0,0,0) scale(1) rotate(0deg)';b.style.opacity='1'},400+i*38);
+  });
+
+  const t=400+mnBtns.length*38+80;
+  setTimeout(()=>{logo.style.transition='all .45s cubic-bezier(.34,1.56,.64,1)';logo.style.opacity='1';logo.style.transform='scale(1) translateY(0)'},t);
+  setTimeout(()=>{sBtn.style.transition='opacity .3s';hBtn.style.transition='opacity .3s';sBtn.style.opacity='1';hBtn.style.opacity='1'},t+80);
+},180);
+
+renderHist();
+</script>
+</body>
+</html>
